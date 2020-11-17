@@ -11,7 +11,7 @@ import sys, re
 # Parametros de acesso da interface web do Zabbix 
 server = "http://localhost/zabbix"
 username = "Admin"              
-password = "LuizXpTo766"     
+password = "Admin123"     
 zapi = ZabbixAPI(server = server)
 zapi.login(username, password)
 zapi.event.acknowledge({"eventids": sys.argv[1], "action": 6,"message": "Ticket " + str(sys.argv[2]) + " criado no OTRS."})
