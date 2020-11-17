@@ -2,17 +2,41 @@
 # -*- coding: utf-8 -*-
 ###############################################################
 # Autor: Janssen dos Reis Lima - janssenreislima@gmail.com    #
-# Objetivo: Fazer o ack no evento automaticamente             #
+# Objetivo: Abrir e fechar registros no no OTRS via API       #
+#           a partir de um problema identificado pelo Zabbix  #
 # Versao: 1.0                                                 #
 ###############################################################
-from zabbix_api import ZabbixAPI
-import sys, re
 
-# Parametros de acesso da interface web do Zabbix 
-server = "http://localhost/zabbix"
-username = "Admin"              
-password = "Admin123"     
-zapi = ZabbixAPI(server = server)
-zapi.login(username, password)
-zapi.event.acknowledge({"eventids": sys.argv[1], "action": 6,"message": "Ticket " + str(sys.argv[2]) + " criado no OTRS."})
-#zapi.event.acknowledge({"eventids": sys.argv[1], "message": "Ticket" })
+from otrs.ticket.template import GenericTicketConnectorSOAP
+from otrs.client import GenericInterfaceClient
+from otrs.ticket.objects import Ticket, Article, DynamicField, Attachment
+import sys, os
+
+server_uri = 'http://10.128.0.4' # IP do servidor web do OTRS
+webservice_name = 'IntegraZabbix' # Nome do webservice importado no OTRS
+client = GenericInterfaceClient(server_uri, tc=GenericTicketConnectorSOAP(webservice_name))
+client.tc.SessionCreate(user_login='isweluiz', password='pokavergonha')
+fechar_ticket = Ticket(State='Fechado automaticamente')
+assunto_artigo_fechado="Fechado Auto" + sys.argv[4]
+estado_trigger = sys.argv[6]
+artigo_fechar = Article(Subject=assunto_artigo_fechado, Body=assunto_artigo_fechado, Charset='UTF8', MimeType='text/plain')
+def abrirTicket():
+    corpo = sys.argv[3] + " " + sys.argv[4]
+    evento = sys.argv[4]
+    t = Ticket(State='Novo', Priority='3 normal', Queue='Zabbix', Title=sys.argv[1], CustomerUser='zabbix', Type='Evento')
+    a = Article(Subject=sys.argv[2], Body=corpo, Charset='UTF8', MimeType='text/plain')
+    df1 = DynamicField(Name='ZabbixIdTrigger', Value=sys.argv[5])
+    df2 = DynamicField(Name='ZabbixStateTrigger', Value=sys.argv[6])
+    df3 = DynamicField(Name='ZabbixEvento', Value=sys.argv[4])
+    ticket_id, numero_ticket = client.tc.TicketCreate(t, a, [df1, df2, df3])
+    comando = "python /usr/lib/zabbix/externalscripts/ack_zabbix.py " + str(evento) + " " + str(numero_ticket)
+    os.system(comando)
+def fecharTicket():
+    df_searchId = DynamicField(Name='ZabbixIdTrigger', Value=sys.argv[5], Operator='Like')
+    df_searchState = DynamicField(Name='ZabbixStateTrigger', Value=sys.argv[6], Operator='Like')
+    busca_df=client.tc.TicketSearch(OwnerIDs=2,Queues='Zabbix', dynamic_fields=[df_searchId])
+    client.tc.TicketUpdate(ticket_id=busca_df[0], ticket=fechar_ticket, article=artigo_fechar)
+if estado_trigger == "RESOLVED":
+    fecharTicket()
+else:
+    abrirTicket()
